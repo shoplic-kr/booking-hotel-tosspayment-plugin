@@ -328,9 +328,87 @@ class TossPaymentsListener extends AbstractNotificationListener {
         }
     }
 
-    // Inherited methods from AbstractNotificationListener that handle status changes
-    // protected function paymentCompleted( $log )
-    // protected function paymentFailed( $log )
-    // protected function paymentRefunded( $log ) - Not used in this flow
-    // protected function paymentOnHold( $log ) - Not typically used for direct card payments
+    // ==================================================
+    // START: Implementation of Abstract Methods
+    // ==================================================
+
+    /**
+     * Mark the payment as completed.
+     * Wraps the PaymentManager method.
+     *
+     * @param string $log Optional log message.
+     * @return bool Success status.
+     */
+    protected function paymentCompleted($log = '') {
+        if (!$this->payment) {
+             error_log('[' . __CLASS__ . '] Attempted paymentCompleted without a valid payment object.');
+             return false;
+        }
+        // Add gateway-specific prefix to log
+        $logMsg = sprintf('[%s] %s', $this->gatewayId, $log);
+        if ($this->isDebug) {
+             MPHB()->log()->debug(sprintf('[%s] Calling paymentManager()->completePayment for Payment ID %d. Log: %s', __CLASS__, $this->payment->getId(), $logMsg));
+        }
+        return MPHB()->paymentManager()->completePayment($this->payment, $logMsg);
+    }
+
+    /**
+     * Mark the payment as failed.
+     * Wraps the PaymentManager method.
+     *
+     * @param string $log Optional log message.
+     * @return bool Success status.
+     */
+    protected function paymentFailed($log = '') {
+        if (!$this->payment) {
+             error_log('[' . __CLASS__ . '] Attempted paymentFailed without a valid payment object.');
+             return false;
+        }
+        $logMsg = sprintf('[%s] %s', $this->gatewayId, $log);
+         if ($this->isDebug) {
+             MPHB()->log()->debug(sprintf('[%s] Calling paymentManager()->failPayment for Payment ID %d. Log: %s', __CLASS__, $this->payment->getId(), $logMsg));
+        }
+        return MPHB()->paymentManager()->failPayment($this->payment, $logMsg);
+    }
+
+    /**
+     * Mark the payment as refunded.
+     * NOTE: Actual Toss cancellation happens via API calls initiated elsewhere (e.g., admin).
+     * This method is primarily for updating the MPHB status when triggered by the listener
+     * (less common for card payments) or potentially other flows.
+     *
+     * @param string $log Optional log message.
+     * @return bool Success status.
+     */
+    protected function paymentRefunded($log = '') {
+        if (!$this->payment) {
+             error_log('[' . __CLASS__ . '] Attempted paymentRefunded without a valid payment object.');
+             return false;
+        }
+        $logMsg = sprintf('[%s] %s', $this->gatewayId, $log);
+         if ($this->isDebug) {
+             MPHB()->log()->debug(sprintf('[%s] Calling paymentManager()->refundPayment for Payment ID %d. Log: %s', __CLASS__, $this->payment->getId(), $logMsg));
+        }
+        return MPHB()->paymentManager()->refundPayment($this->payment, $logMsg);
+    }
+
+    /**
+     * Mark the payment as on-hold.
+     * NOTE: Not typically used for direct card payments, but required by the abstract class.
+     *
+     * @param string $log Optional log message.
+     * @return bool Success status.
+     */
+    protected function paymentOnHold($log = '') {
+        if (!$this->payment) {
+             error_log('[' . __CLASS__ . '] Attempted paymentOnHold without a valid payment object.');
+             return false;
+        }
+        $logMsg = sprintf('[%s] %s', $this->gatewayId, $log);
+        if ($this->isDebug) {
+             MPHB()->log()->debug(sprintf('[%s] Calling paymentManager()->holdPayment for Payment ID %d. Log: %s', __CLASS__, $this->payment->getId(), $logMsg));
+        }
+        return MPHB()->paymentManager()->holdPayment($this->payment, $logMsg);
+    }
 }
+
