@@ -9,6 +9,7 @@ use MPHB\Entities\Payment;
 use MPHB\TossPaymentsCard\TossPaymentsAPI;
 use MPHB\TossPaymentsCard\TossPaymentsListener;
 use MPHB\TossPaymentsCard\TossPaymentsUtils;
+use MPHB\Ajax;
 
 if (!defined('ABSPATH')) {
     exit;
@@ -230,21 +231,20 @@ class TossPaymentsCardGateway extends Gateway {
      * @return array
      */
     protected function getCheckoutLocalizationData(): array {
-        // We pass initial config, but the final payment data comes from processPayment response
-       return [
-           'gateway_id' => $this->getId(),
-           'client_key' => $this->clientKey,
-           'ajax_url'   => admin_url('admin-ajax.php'),
-           'nonce'      => wp_create_nonce('mphb_tosspayments_card_nonce'),
-           'mphb_ajax_url' => Ajax::getEndpoint(), // <-- Get MPHB's AJAX endpoint
-           'mphb_checkout_nonce' => wp_create_nonce('mphb_checkout_nonce'), // <-- Get MPHB's checkout nonce (check if this nonce name is correct in MPHB)
-            'i18n' => [
-                'payment_error' => __('An error occurred during payment processing. Please try again.', 'mphb-tosspayments-card'),
-                'request_failed' => __('Failed to initiate payment request.', 'mphb-tosspayments-card'),
-                'booking_failed' => __('Failed to process booking. Please try again.', 'mphb-tosspayments-card'),
-            ]
-       ];
-   }
+        return [
+            'gateway_id' => $this->getId(),
+            'client_key' => $this->clientKey,
+            'ajax_url'   => admin_url('admin-ajax.php'), // Standard WP AJAX URL
+            'nonce'      => wp_create_nonce('mphb_tosspayments_card_nonce'),
+            'mphb_ajax_url' => Ajax::getEndpoint(), // Now PHP knows which Ajax class this is
+            'mphb_checkout_nonce' => wp_create_nonce('mphb_checkout_nonce'), // Check if 'mphb_checkout_nonce' is correct
+             'i18n' => [
+                 'payment_error' => __('An error occurred during payment processing. Please try again.', 'mphb-tosspayments-card'),
+                 'request_failed' => __('Failed to initiate payment request.', 'mphb-tosspayments-card'),
+                 'booking_failed' => __('Failed to process booking. Please try again.', 'mphb-tosspayments-card'),
+             ]
+        ];
+    }
 
      /**
      * Process the payment *after* MPHB creates the Booking and Payment posts.
