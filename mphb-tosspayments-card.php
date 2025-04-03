@@ -24,7 +24,7 @@ define('MPHB_TOSSPAYMENTS_CARD_PLUGIN_PATH', plugin_dir_path(MPHB_TOSSPAYMENTS_C
 define('MPHB_TOSSPAYMENTS_CARD_PLUGIN_URL', plugin_dir_url(MPHB_TOSSPAYMENTS_CARD_PLUGIN_FILE));
 
 // Check if MPHB is active
-if (!class_exists('\MPHB\Plugin')) {
+if (!class_exists('HotelBookingPlugin')) {
     add_action('admin_notices', function () {
         ?>
         <div class="error">
@@ -68,7 +68,7 @@ function mphb_init_tosspayments_card_gateway() {
 }
 // Use mphb_init_gateways action to register the gateway
 // This ensures it runs after MPHB's GatewayManager is ready
-add_action('mphb_init_gateways', 'mphb_init_tosspayments_card_gateway', 20); // Priority 20 to run after built-in ones
+add_action('plugins_loaded', 'mphb_init_tosspayments_card_gateway', 20); // Priority 20 to run after built-in ones
 
 /**
  * Load text domain for translations.
