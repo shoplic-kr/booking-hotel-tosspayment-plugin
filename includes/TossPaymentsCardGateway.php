@@ -35,7 +35,6 @@ class TossPaymentsCardGateway extends Gateway {
         add_filter('mphb_gateway_has_instructions', [$this, 'hideInstructions'], 10, 2);
 
         parent::__construct(); // Calls initId, initDefaultOptions, setupProperties, etc.
-
         $this->api = new TossPaymentsAPI($this->secretKey, $this->isDebug);
 
         // Initialize the listener only if the gateway is active
@@ -75,6 +74,8 @@ class TossPaymentsCardGateway extends Gateway {
     }
 
     protected function setupProperties() {
+        function_exists('ray') && ray('TossPaymentsCardGateway setupProperties called');
+        
         parent::setupProperties(); // Loads title, description, enabled
 
         $this->adminTitle = __('Toss Payments - Credit Card', 'mphb-tosspayments-card');
@@ -129,34 +130,63 @@ class TossPaymentsCardGateway extends Gateway {
      * @param \MPHB\Admin\Tabs\SettingsSubTab $subTab
      */
     public function registerOptionsFields(&$subTab) {
+        // Inside TossPaymentsCardGateway.php -> registerOptionsFields() method
         parent::registerOptionsFields($subTab); // Registers enable, title, description
 
         $apiGroup = new Groups\SettingsGroup("mphb_payments_{$this->getId()}_api", __('API Settings', 'mphb-tosspayments-card'), $subTab->getOptionGroupName());
 
-        $apiGroupFields = [
-            FieldFactory::create("mphb_payment_gateway_{$this->id}_client_key", [
-                'type' => 'text',
-                'label' => __('Client Key', 'mphb-tosspayments-card'),
-                'default' => $this->getDefaultOption('client_key'),
-                'description' => __('Enter your Toss Payments Client Key (Test or Live).', 'mphb-tosspayments-card'),
-            ]),
-            FieldFactory::create("mphb_payment_gateway_{$this->id}_secret_key", [
-                'type' => 'password', // Use password type for secret key
-                'label' => __('Secret Key', 'mphb-tosspayments-card'),
-                'default' => $this->getDefaultOption('secret_key'),
-                'description' => __('Enter your Toss Payments Secret Key (Test or Live).', 'mphb-tosspayments-card'),
-            ]),
-             FieldFactory::create("mphb_payment_gateway_{$this->id}_debug", [
-                'type' => 'checkbox',
-                'label' => __('Debug Mode', 'mphb-tosspayments-card'),
-                'inner_label' => __('Enable Debug Logging', 'mphb-tosspayments-card'),
-                'default' => $this->getDefaultOption('debug'),
-                'description' => __('Enable detailed logging for troubleshooting. Logs will be stored via MPHB logger.', 'mphb-tosspayments-card'),
-            ]),
-        ];
+        $apiGroupFields = []; // Initialize as empty array
 
-        $apiGroup->addFields($apiGroupFields);
-        $subTab->addGroup($apiGroup);
+        // --- Start Debugging ---
+        $clientKeyField = FieldFactory::create("mphb_payment_gateway_{$this->id}_client_key", [
+            'type' => 'text',
+            'label' => __('Client Key', 'mphb-tosspayments-card'),
+            'default' => $this->getDefaultOption('client_key'),
+            'description' => __('Enter your Toss Payments Client Key (Test or Live).', 'mphb-tosspayments-card'),
+        ]);
+        if ($clientKeyField === null) {
+            error_log("MPHB TossPaymentsCard Debug: FieldFactory::create returned null for client_key");
+        } else {
+            $apiGroupFields[] = $clientKeyField;
+        }
+
+        $secretKeyField = FieldFactory::create("mphb_payment_gateway_{$this->id}_secret_key", [
+            'type' => 'text', // Ensure this is 'text'
+            'label' => __('Secret Key', 'mphb-tosspayments-card'),
+            'default' => $this->getDefaultOption('secret_key'),
+            'description' => __('Enter your Toss Payments Secret Key (Test or Live).', 'mphb-tosspayments-card'),
+        ]);
+        if ($secretKeyField === null) {
+            error_log("MPHB TossPaymentsCard Debug: FieldFactory::create returned null for secret_key");
+        } else {
+            $apiGroupFields[] = $secretKeyField;
+        }
+
+        $debugField = FieldFactory::create("mphb_payment_gateway_{$this->id}_debug", [
+            'type' => 'checkbox',
+            'label' => __('Debug Mode', 'mphb-tosspayments-card'),
+            'inner_label' => __('Enable Debug Logging', 'mphb-tosspayments-card'),
+            'default' => $this->getDefaultOption('debug'),
+            'description' => __('Enable detailed logging for troubleshooting. Logs will be stored via MPHB logger.', 'mphb-tosspayments-card'),
+        ]);
+        if ($debugField === null) {
+            error_log("MPHB TossPaymentsCard Debug: FieldFactory::create returned null for debug");
+        } else {
+            $apiGroupFields[] = $debugField;
+        }
+        // --- End Debugging ---
+
+
+        // Check if the array is still empty or contains nulls before adding
+        if (empty($apiGroupFields) || count(array_filter($apiGroupFields)) !== count($apiGroupFields)) {
+            error_log("MPHB TossPaymentsCard Error: One or more API fields failed to create. Fields array: " . print_r($apiGroupFields, true));
+            // Optionally prevent adding fields if there was an error
+        } else {
+            // This line (previously line 159) might still error if $apiGroupFields contains null
+            $apiGroup->addFields($apiGroupFields);
+            $subTab->addGroup($apiGroup);
+        }
+
     }
 
      /**
@@ -194,51 +224,103 @@ class TossPaymentsCardGateway extends Gateway {
     }
 
     /**
-     * Prepare data to be passed to the frontend JavaScript.
+     * Prepare data to be passed to the frontend JavaScript initially.
+     * We remove tossOrderId generation from here as Booking ID might be null.
+     *
      * @return array
      */
     protected function getCheckoutLocalizationData(): array {
-        return [
-            'gateway_id' => $this->getId(),
-            'client_key' => $this->clientKey,
-            'ajax_url' => admin_url('admin-ajax.php'), // Or MPHB specific AJAX handler if available
-            'nonce' => wp_create_nonce('mphb_tosspayments_card_nonce'), // Create a nonce for potential AJAX later
-             'i18n' => [
-                 'payment_error' => __('An error occurred during payment processing. Please try again.', 'mphb-tosspayments-card'),
-                 'request_failed' => __('Failed to initiate payment request.', 'mphb-tosspayments-card'),
-             ]
-            // Add any other necessary data like i18n strings
+        // We pass initial config, but the final payment data comes from processPayment response
+       return [
+           'gateway_id' => $this->getId(),
+           'client_key' => $this->clientKey,
+           'ajax_url'   => admin_url('admin-ajax.php'),
+           'nonce'      => wp_create_nonce('mphb_tosspayments_card_nonce'),
+           'mphb_ajax_url' => Ajax::getEndpoint(), // <-- Get MPHB's AJAX endpoint
+           'mphb_checkout_nonce' => wp_create_nonce('mphb_checkout_nonce'), // <-- Get MPHB's checkout nonce (check if this nonce name is correct in MPHB)
+            'i18n' => [
+                'payment_error' => __('An error occurred during payment processing. Please try again.', 'mphb-tosspayments-card'),
+                'request_failed' => __('Failed to initiate payment request.', 'mphb-tosspayments-card'),
+                'booking_failed' => __('Failed to process booking. Please try again.', 'mphb-tosspayments-card'),
+            ]
+       ];
+   }
+
+     /**
+     * Process the payment *after* MPHB creates the Booking and Payment posts.
+     * Prepare the data needed for Toss and send it back to the JS.
+     *
+     * @param Booking $booking The created Booking object (should have an ID).
+     * @param Payment $payment The created Payment object (should have an ID, status pending).
+     * @return array|bool Response for MPHB's AJAX handler.
+     */
+    public function processPayment(Booking $booking, Payment $payment) {
+        if ($this->isDebug) {
+            MPHB()->log()->debug(sprintf('[%s] processPayment called for Booking ID: %s, Payment ID: %s', __CLASS__, $booking->getId(), $payment->getId()));
+        }
+
+        // Ensure we have valid IDs now
+        $bookingId = $booking->getId();
+        $paymentId = $payment->getId(); // Use Payment ID for better uniqueness if needed
+        if (!$bookingId || !$paymentId) {
+            MPHB()->log()->error(sprintf('[%s] processPayment Error: Missing Booking or Payment ID.', __CLASS__));
+            // Returning false might trigger MPHB's default failure handling
+            return false;
+        }
+
+        // Generate the unique Toss Order ID using the *Payment* ID for reliability
+        // Or stick to Booking ID if preferred, it should be valid now. Let's use Payment ID.
+        $tossOrderId = TossPaymentsUtils::generateTossOrderId($paymentId); // <-- Use Payment ID
+
+         // Store Toss Order ID in payment meta immediately for the listener
+        update_post_meta($paymentId, '_mphb_toss_order_id', $tossOrderId);
+
+        // Generate callback URLs using the final Toss Order ID
+        $successUrl = TossPaymentsUtils::generateCallbackUrl($this->getId(), 'success', $tossOrderId);
+        $failUrl = TossPaymentsUtils::generateCallbackUrl($this->getId(), 'fail', $tossOrderId);
+
+        // Prepare data for Toss request
+        $amount = round(floatval($payment->getAmount()));
+        $customer = $booking->getCustomer();
+        $customerName = $customer ? $customer->getName() : __('Guest', 'mphb-tosspayments-card');
+        $customerEmail = $customer ? $customer->getEmail() : '';
+        $orderName = $this->generateItemName($booking); // Use parent method for description
+
+        $tossData = [
+            'amount'         => $amount,
+            'orderId'        => $tossOrderId,
+            'orderName'      => $orderName,
+            'customerName'   => $customerName,
+            'customerEmail'  => $customerEmail,
+            'successUrl'     => $successUrl,
+            'failUrl'        => $failUrl,
+            'windowTarget'   => '_self', // Or '_blank' if you want a new window/tab
+            // Add any other necessary fixed parameters for requestPayment
         ];
+
+        if ($this->isDebug) {
+            MPHB()->log()->debug(sprintf('[%s] Prepared Toss Data for JS: %s', __CLASS__, print_r($tossData, true)));
+        }
+
+
+        // Signal MPHB's AJAX handler to proceed with our custom JS flow.
+        // We need to send back 'success' and the data for the JS.
+        // MPHB's Ajax::sendSuccess expects specific format, may need adjustment.
+        // A common pattern is to return an array that the JS can use.
+        return [
+            'result'   => 'success', // Indicate MPHB processing was successful
+            'gateway'  => $this->getId(), // Identify the gateway
+            'tossData' => $tossData // The data needed by our JS
+        ];
+
+        // Note: We are NOT redirecting here. We are sending data back to the JS
+        // which is handling the AJAX request initiated by the form submission.
     }
 
      /**
-      * Process the payment.
-      * In this flow, the actual payment initiation happens on the frontend via JS.
-      * This method might be called by MPHB *after* the initial booking form submission
-      * but *before* the redirect to Toss. We mainly use it to set the payment to pending.
-      * The real completion/failure happens in the TossPaymentsListener.
-      *
-      * @param Booking $booking
-      * @param Payment $payment
-      */
-     public function processPayment(Booking $booking, Payment $payment) {
-         // The core logic happens in JS (requestPayment) and the Listener (callback handling).
-         // Here, we might just ensure the payment status is initially pending.
-         // MPHB typically creates the Payment post with 'pending' status before calling this.
-         // If the status is already pending, we might not need to do anything here,
-         // as the JS will take over the flow.
-
-         // Add a log entry that Toss Payments process started
-         $payment->addLog(sprintf(__('Payment process initiated with %s.', 'mphb-tosspayments-card'), $this->getTitle()));
-
-         // Let MPHB handle the redirect/response. The JS should intercept the default form submission.
-         // We don't redirect from here in this model.
-         return true; // Indicate processing started, but JS/callback handles completion.
-     }
-
-     /**
-     * Provide checkout data, mainly used by JS.
-     * Overrides the parent method to add Toss-specific data.
+     * Provide checkout data - THIS IS NOW LESS IMPORTANT for Toss specific data
+     * as the final data comes from processPayment response.
+     * Keep it for potential parent class usage or basic rendering.
      *
      * @param Booking $booking
      * @return array
@@ -246,32 +328,15 @@ class TossPaymentsCardGateway extends Gateway {
     public function getCheckoutData($booking): array {
         $parentData = parent::getCheckoutData($booking); // Gets amount, description
 
-        // Generate a unique Order ID for Toss Payments, including the MPHB Payment ID
-        // The Payment object might not be created yet when this is called.
-        // We need a way to link back. Let's use the booking ID for now and refine if needed.
-        // A better approach might involve an AJAX call from JS to create the MPHB Payment
-        // *before* calling Toss, get the payment ID, and use that.
-        // Simpler approach for now: use booking ID + timestamp. The Listener will need to find the payment via booking ID.
-        $tossOrderId = TossPaymentsUtils::generateTossOrderId($booking->getId());
-
-        // Get customer details
-        $customer = $booking->getCustomer();
-        $customerName = $customer ? $customer->getName() : __('Guest', 'mphb-tosspayments-card');
-        $customerEmail = $customer ? $customer->getEmail() : ''; // Toss might require email
-
-        // Ensure amount is correctly formatted (integer for KRW)
+        // We no longer generate Toss Order ID here
         $amount = round($parentData['amount']);
 
+        // Add basic info if needed by templates, but the critical data for JS
+        // will come from the processPayment response via AJAX.
         return array_merge($parentData, [
             'gateway_id' => $this->getId(),
-            'client_key' => $this->clientKey,
-            'toss_order_id' => $tossOrderId,
-            'toss_order_name' => $parentData['paymentDescription'], // Use description from parent
-            'amount' => $amount, // Use calculated deposit amount, rounded for KRW
-            'customer_name' => $customerName,
-            'customer_email' => $customerEmail,
-            'success_url' => $this->listener ? TossPaymentsUtils::generateCallbackUrl($this->getId(), 'success', $tossOrderId) : '',
-            'fail_url' => $this->listener ? TossPaymentsUtils::generateCallbackUrl($this->getId(), 'fail', $tossOrderId) : '',
+            'amount' => $amount,
+            // 'client_key' => $this->clientKey, // JS gets this from localized params now
         ]);
     }
 
