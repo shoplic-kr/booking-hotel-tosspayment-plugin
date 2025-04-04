@@ -1,7 +1,7 @@
 /* global jQuery, mphbTossPaymentsCardParams, TossPayments */
 jQuery(($) => {
     'use strict';
-  
+
     const tossHandler = {
       $checkoutForm: null,
       gatewayId: mphbTossPaymentsCardParams.gateway_id || 'tosspayments_card',
@@ -9,7 +9,7 @@ jQuery(($) => {
       isProcessing: false,
   
       init() {
-        this.$checkoutForm = $('form.mphb-checkout-form'); // Adjust selector if needed
+        this.$checkoutForm = $('form.mphb_sc_checkout-form'); // Adjust selector if needed
   
         if (!this.$checkoutForm.length || !this.clientKey) {
           console.log('TossPayments Card: Checkout form or Client Key not found.');
@@ -51,6 +51,7 @@ jQuery(($) => {
       handleFormSubmit(event) {
         // Only intercept if Toss Payments Card is selected
         if (!this.isTossSelected()) {
+          console.log('TossPayments Card: Not selected, allowing default submission.');
           return true; // Allow default submission for other gateways
         }
   
@@ -86,8 +87,7 @@ jQuery(($) => {
               this.isProcessing = false;
               return false;
          }
-  
-  
+
         this.requestTossPayment(paymentData);
   
         return false; // Prevent default form submission
